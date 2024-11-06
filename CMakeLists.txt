@@ -40,11 +40,19 @@ install(TARGETS ucrash)
 
 if (UCRASH_ENABLE_TESTER)
   add_executable(tester lib/tester.cpp)
-  target_include_directories(tester PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  add_dependencies(tester handler_console)
 
-  target_link_libraries(tester
-    ucrash
-  )
+  target_include_directories(tester PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(tester ucrash)
+
+  set(HANDLER_CONSOLE_PATH "${CMAKE_BINARY_DIR}/third-party/crashpad/handler/${CMAKE_BUILD_TYPE}/handler_console")
+  if(WIN32)
+    string(CONCAT HANDLER_CONSOLE_PATH ${HANDLER_CONSOLE_PATH} ".exe")
+  endif(WIN32)
 
   install(TARGETS tester)
+  install(FILES
+    ${HANDLER_CONSOLE_PATH}
+    DESTINATION ${CMAKE_INSTALL_PREFIX}
+  )
 endif(UCRASH_ENABLE_TESTER)
