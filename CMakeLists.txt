@@ -9,6 +9,9 @@ project(ucrash VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# ucrash is a shared library linking crashpad's static libs, so everything
+# must be position-independent on ELF platforms.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(WIN32)
   if(MSVC)
@@ -17,7 +20,7 @@ if(WIN32)
   endif(MSVC)
 endif(WIN32)
 
-set(UCRASH_ENABLE_TESTER OFF)
+option(UCRASH_ENABLE_TESTER "Build the crash tester" OFF)
 
 add_subdirectory(third-party)
 
@@ -40,19 +43,24 @@ install(TARGETS ucrash)
 
 if (UCRASH_ENABLE_TESTER)
   add_executable(tester lib/tester.cpp)
-  add_dependencies(tester handler_console)
+  # handler_console only exists on Windows; on other platforms the tester
+  # uses the plain handler binary.
+  if(WIN32)
+    add_dependencies(tester handler_console)
+  else()
+    add_dependencies(tester handler)
+  endif()
 
   target_include_directories(tester PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(tester ucrash)
 
-  set(HANDLER_CONSOLE_PATH "${CMAKE_BINARY_DIR}/third-party/crashpad/handler/${CMAKE_BUILD_TYPE}/handler_console")
   if(WIN32)
-    string(CONCAT HANDLER_CONSOLE_PATH ${HANDLER_CONSOLE_PATH} ".exe")
-  endif(WIN32)
+    set(HANDLER_CONSOLE_PATH "${CMAKE_BINARY_DIR}/third-party/crashpad/handler/${CMAKE_BUILD_TYPE}/handler_console.exe")
+    install(FILES
+      ${HANDLER_CONSOLE_PATH}
+      DESTINATION ${CMAKE_INSTALL_PREFIX}
+    )
+  endif()
 
   install(TARGETS tester)
-  install(FILES
-    ${HANDLER_CONSOLE_PATH}
-    DESTINATION ${CMAKE_INSTALL_PREFIX}
-  )
 endif(UCRASH_ENABLE_TESTER)
