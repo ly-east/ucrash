@@ -10,9 +10,47 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#include <Windows.h>
+#elif defined(__linux__)
+#include <system_error>
+#endif
+
 namespace {
 static std::unique_ptr<crashpad::CrashReportDatabase> database;
 using StringType = base::FilePath::StringType;
+
+// Directory containing the running executable. The handler binary and the
+// crash database live next to it; the current working directory varies with
+// how the app is launched and cannot be relied on.
+static std::filesystem::path getSelfDirectory() {
+#if defined(_WIN32)
+  std::wstring buf(MAX_PATH, L'\0');
+
+  while (true) {
+    const DWORD len = GetModuleFileNameW(nullptr, buf.data(),
+                                         static_cast<DWORD>(buf.size()));
+    if (0 == len)
+      return {};
+    if (len >= buf.size()) {
+      buf.resize(buf.size() * 2);
+      continue;
+    }
+
+    buf.resize(len);
+    break;
+  }
+
+  return std::filesystem::path{buf}.parent_path();
+#else
+  std::error_code ec;
+  const auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+  if (ec)
+    return {};
+  return exe.parent_path();
+#endif
+}
+
 
 static bool startCrashHandler(StringType const &handler_path,
                               StringType const &db_path) {
@@ -66,8 +104,11 @@ bool setHandler(bool is_console) {
    * handlers. This path may be relative.
    */
 
-  auto current_path = std::filesystem::current_path();
-  auto handler_path = std::filesystem::path{current_path} / handler_name;
+  const auto exe_dir = getSelfDirectory();
+  if (exe_dir.empty())
+    return false;
+
+  auto handler_path = exe_dir / handler_name;
   if (!std::filesystem::exists(handler_path))
     return false;
 
@@ -78,7 +119,7 @@ bool setHandler(bool is_console) {
    * queue crash data.
    */
 
-  auto db_path = std::filesystem::path{current_path} / "crash";
+  auto db_path = exe_dir / "crash";
   if (!std::filesystem::exists(db_path))
     std::filesystem::create_directories(db_path);
 
